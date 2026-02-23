@@ -6,10 +6,26 @@ import { revalidatePath } from 'next/cache'
 export async function updateLeadStageAction(leadId: string, newStageId: string) {
     const supabase = await createClient()
 
-    // Update lead stage
+    // Find if the new stage is closed_won
+    const { data: stageData, error: stageError } = await supabase
+        .from('pipeline_stages')
+        .select('is_closed_won')
+        .eq('id', newStageId)
+        .single()
+
+    if (stageError) throw new Error(stageError.message)
+
+    // Determine the status automatically based on whether the target stage is "won"
+    const newStatus = stageData?.is_closed_won ? 'won' : 'open'
+
+    // Update lead stage and status
     const { error } = await supabase
         .from('leads')
-        .update({ stage_id: newStageId, updated_at: new Date().toISOString() })
+        .update({
+            stage_id: newStageId,
+            status: newStatus,
+            updated_at: new Date().toISOString()
+        })
         .eq('id', leadId)
 
     if (error) {
