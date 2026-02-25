@@ -65,11 +65,67 @@ export async function updateLeadStageAction(leadId: string, newStageId: string) 
     return { success: true }
 }
 
-export async function fetchLeadsAction() {
+export async function fetchLeadsAction(companyId?: string) {
     const supabase = await createClient()
-    const { data: leads, error } = await supabase.from('leads').select('*').order('created_at', { ascending: false })
+    let query = supabase.from('leads').select('*').order('created_at', { ascending: false })
+    if (companyId) {
+        query = query.eq('company_id', companyId)
+    }
+    const { data: leads, error } = await query
     if (error) throw new Error(error.message)
     return leads
+}
+
+export async function fetchLeadDetailsAction(leadId: string) {
+    const supabase = await createClient()
+    const [leadRes, timelineRes, remindersRes] = await Promise.all([
+        supabase.from('leads').select('*').eq('id', leadId).single(),
+        supabase.from('lead_timeline_events').select('*').eq('lead_id', leadId).order('created_at', { ascending: false }),
+        supabase.from('reminders').select('*').eq('lead_id', leadId).eq('is_completed', false).order('due_date', { ascending: true }),
+    ])
+    if (leadRes.error) throw new Error(leadRes.error.message)
+    return {
+        lead: leadRes.data,
+        timeline: timelineRes.data || [],
+        reminders: remindersRes.data || [],
+    }
+}
+
+export async function fetchRemindersAction(leadId: string) {
+    const supabase = await createClient()
+    const { data, error } = await supabase
+        .from('reminders')
+        .select('*')
+        .eq('lead_id', leadId)
+        .eq('is_completed', false)
+        .order('due_date', { ascending: true })
+    if (error) throw new Error(error.message)
+    return data
+}
+
+export async function fetchPipelineStagesAction(companyId: string) {
+    const supabase = await createClient()
+    const { data, error } = await supabase
+        .from('pipeline_stages')
+        .select('*')
+        .eq('company_id', companyId)
+        .order('order', { ascending: true })
+    if (error) throw new Error(error.message)
+    return data
+}
+
+export async function fetchDashboardDataAction(companyId: string) {
+    const supabase = await createClient()
+    const [leadsRes, remindersRes, stagesRes] = await Promise.all([
+        supabase.from('leads').select('*').eq('company_id', companyId),
+        supabase.from('reminders').select('*').eq('company_id', companyId).eq('is_completed', false),
+        supabase.from('pipeline_stages').select('*').eq('company_id', companyId).order('order', { ascending: true }),
+    ])
+    return {
+        leads: leadsRes.data || [],
+        reminders: remindersRes.data || [],
+        stages: stagesRes.data || [],
+    }
 }
 
 export async function createLeadAction(data: { name: string; company_name: string; value: number; email: string; phone: string }) {

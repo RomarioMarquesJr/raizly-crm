@@ -1,10 +1,11 @@
 'use client'
 
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { KanbanBoard } from './KanbanBoard'
+import { LeadPanelWrapper } from './LeadPanelWrapper'
 import { updateLeadStageAction, fetchLeadsAction } from '@/app/(dashboard)/actions'
 import { toast } from 'sonner'
-import { useRouter } from 'next/navigation'
 
 type Stage = {
     id: string
@@ -21,13 +22,13 @@ type Lead = {
     stage_id: string
 }
 
-export function KanbanContainer({ initialStages, initialLeads }: { initialStages: Stage[], initialLeads: Lead[] }) {
+export function KanbanContainer({ initialStages, initialLeads, companyId }: { initialStages: Stage[]; initialLeads: Lead[]; companyId: string }) {
     const queryClient = useQueryClient()
-    const router = useRouter()
+    const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
 
     const { data: leads } = useQuery({
-        queryKey: ['leads'],
-        queryFn: () => fetchLeadsAction(),
+        queryKey: ['leads', companyId],
+        queryFn: () => fetchLeadsAction(companyId),
         initialData: initialLeads,
     })
 
@@ -35,31 +36,25 @@ export function KanbanContainer({ initialStages, initialLeads }: { initialStages
         mutationFn: ({ leadId, stageId }: { leadId: string; stageId: string }) =>
             updateLeadStageAction(leadId, stageId),
         onMutate: async ({ leadId, stageId }) => {
-            // Cancel any outgoing refetches to avoid overwriting optimistic update
-            await queryClient.cancelQueries({ queryKey: ['leads'] })
-
-            // Snapshot previous value
-            const previousLeads = queryClient.getQueryData<Lead[]>(['leads'])
-
-            // Optimistically update
+            await queryClient.cancelQueries({ queryKey: ['leads', companyId] })
+            const previousLeads = queryClient.getQueryData<Lead[]>(['leads', companyId])
             if (previousLeads) {
-                queryClient.setQueryData<Lead[]>(['leads'], (old) =>
+                queryClient.setQueryData<Lead[]>(['leads', companyId], (old) =>
                     old?.map((l) => (l.id === leadId ? { ...l, stage_id: stageId } : l))
                 )
             }
-
             return { previousLeads }
         },
-        onError: (err, newTodo, context) => {
-            // Rollback on error
+        onError: (err, _vars, context) => {
             if (context?.previousLeads) {
-                queryClient.setQueryData(['leads'], context.previousLeads)
+                queryClient.setQueryData(['leads', companyId], context.previousLeads)
             }
             toast.error('Falha ao mover lead: ' + err.message)
         },
         onSettled: () => {
-            // Refresh after mutate
-            queryClient.invalidateQueries({ queryKey: ['leads'] })
+            queryClient.invalidateQueries({ queryKey: ['leads', companyId] })
+            queryClient.invalidateQueries({ queryKey: ['dashboard', companyId] })
+            queryClient.invalidateQueries({ queryKey: ['pipelineStages', companyId] })
         },
     })
 
@@ -68,15 +63,27 @@ export function KanbanContainer({ initialStages, initialLeads }: { initialStages
     }
 
     const handleLeadSelect = (leadId: string) => {
-        router.push(`/?leadId=${leadId}`)
+        setSelectedLeadId(leadId)
+    }
+
+    const handleClosePanel = () => {
+        setSelectedLeadId(null)
     }
 
     return (
-        <KanbanBoard
-            initialStages={initialStages}
-            initialLeads={leads as Lead[]}
-            onLeadMove={handleLeadMove}
-            onLeadSelect={handleLeadSelect}
-        />
+        <>
+            <KanbanBoard
+                initialStages={initialStages}
+                initialLeads={leads as Lead[]}
+                onLeadMove={handleLeadMove}
+                onLeadSelect={handleLeadSelect}
+            />
+            {selectedLeadId && (
+                <LeadPanelWrapper
+                    leadId={selectedLeadId}
+                    onClose={handleClosePanel}
+                />
+            )}
+        </>
     )
 }

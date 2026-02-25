@@ -41,6 +41,7 @@ export function CreateLeadModal() {
             toast.success('Lead criado com sucesso')
             setOpen(false)
             queryClient.invalidateQueries({ queryKey: ['leads'] })
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] })
         } catch (error: any) {
             toast.error('Falha ao criar lead: ' + error.message)
         } finally {
