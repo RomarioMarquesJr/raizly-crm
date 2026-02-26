@@ -35,7 +35,8 @@ export async function updateSession(request: NextRequest) {
     if (
         !user &&
         !request.nextUrl.pathname.startsWith('/login') &&
-        !request.nextUrl.pathname.startsWith('/auth')
+        !request.nextUrl.pathname.startsWith('/auth') &&
+        !request.nextUrl.pathname.startsWith('/reset-password')
     ) {
         // no user, potentially redirect to login if it's a protected route
         // Note: ensure we don't block static files
